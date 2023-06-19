@@ -258,7 +258,7 @@ end
 
 % Criteria for BL (threshold = 0.5 seg):
 
-[rowstoelim,~ ] = find(underthresh == 1);
+rowstoelim = underthresh == 1;
 if ~isempty(rowstoelim)
     sortedPETH = sortedPETH(~rowstoelim, :);
 end
