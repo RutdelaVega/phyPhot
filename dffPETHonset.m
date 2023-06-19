@@ -25,15 +25,6 @@ AUCint = p.Results.AUCint;
 savepath = p.Results.savepath;
 summarymeasures = p.Results.summarymeasures;
 
-Pre = 2;
-Post = 2;
-bin = 0.1;
-threshold = 0.5;
-AUCqt = 2;
-AUCint = [-2 0; 0 2];
-savepath = results.FP.path;
-summarymeasures = ["mean", "std"];
-
 %% 1. Load data: 
 
 Fs = results.FP.params.fs;
