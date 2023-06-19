@@ -1,8 +1,7 @@
 
 function [results] = dffPETHoffset(results, varargin)
 
-%% PRUEBA CON DFF %%%
-% Todo basado en baseline:
+%% dffPETHoffset plots and analyzes end of behavior events
 
 p = inputParser;
 addParameter(p,'Pre', 2,@isnumeric);

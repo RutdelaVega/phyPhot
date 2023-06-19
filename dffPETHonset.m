@@ -2,8 +2,7 @@
 
 function [results] = dffPETHonset(results, varargin)
 
-%% PRUEBA CON DFF %%%
-% Todo basado en baseline:
+%% dffPETHonset plots and analyzes beginning of behavior events
 
 
 p = inputParser;
