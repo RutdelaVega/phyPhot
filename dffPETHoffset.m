@@ -7,9 +7,7 @@ p = inputParser;
 addParameter(p,'Pre', 2,@isnumeric);
 addParameter(p,'Post', 2, @isnumeric);
 addParameter(p,'bin', 0.1, @isnumeric);
-% addParameter(p,'BinWinStart', 2, @isnumeric);
-% addParameter(p,'BinWinDuration', 1.5, @isnumeric);
-addParameter(p,'binthreshold', 0.5, @isnumeric);
+addParameter(p,'BLthreshold', 0.5, @isnumeric);
 addParameter(p,'AUCqt', 2, @isnumeric);
 addParameter(p,'AUCint', [-2 0; 0 2], @ismatrix);
 addParameter(p,'savepath', results.FP.path, @ischaracter);
@@ -19,25 +17,13 @@ parse(p,varargin{:});
 Pre = p.Results.Pre;
 Post = p.Results.Post;
 bin = p.Results.bin;
-% BinWinStart = p.Results.BinWinStart;
-% BinWinDuration = p.Results.BinWinDuration;
-threshold = p.Results.binthreshold;
+threshold = p.Results.BLthreshold;
 AUCqt = p.Results.AUCqt;
 AUCint = p.Results.AUCint;
 savepath = p.Results.savepath;
 summarymeasures = p.Results.summarymeasures;
 
 %% 1. Load data: 
-% 
-% Pre = 2;
-% Post = 2;
-% bin = 0.01;
-% % BinWinStart = 20;
-% % BinWinDuration = 20;
-% threshold = 0.5;
-% summarymeasures = ["mean", "std"];
-% AUCqt = 2;
-% AUCint = [-2 0; 0 2];
 
 
 Fs = results.FP.params.fs;
@@ -58,9 +44,6 @@ Time = results.FP.Signals.raw.Time;
  binsize = round(bin*Fs); % Unit is in samples, if each bin represents 0.2 seconds, then how many samples are within 0.2 seconds (in FP fs)
  PreWind = round(Pre*Fs);
  PostWind = round(Post*Fs);
-%  BLWinStart = BinWinStart;
-%  BLWinDur = BinWinDuration;
-%  binsizeperev = repelem(binsize, size(Events, 1)).';
 % Transform timestamps in BHD to timestamps in GCAMP:
 FPtimestamps = round(Events.*Fs);
 
@@ -70,9 +53,6 @@ FPtimestamps = round(Events.*Fs);
 
 evdif = Events(2:end, 1) - Events(1:end-1, 2); % Diferencia entre eventos (idx +1)
 overlap =  evdif < Post;
-% checkfirst = Events(1, 1) - Pre;
-% checkfirst = PreWind - (FPtimestamps(1, 2) - FPtimestamps(1, 1))-1;
-% checklast = Events(:, 2) + Post +1;
 boutdurTS = FPtimestamps(:, 2) - FPtimestamps(:, 1);
 
 
@@ -92,7 +72,6 @@ EVDFF = EVdata;
 BLDFF = BLdata;
 
 nansizepre = abs(boutdurTS - size(EVdata, 2)) - 1;
-% nansizepost = length(DFF) - FPtimestamps(:, 2);
 
 
 % COMPLETE DATA WITH OVERLAP
@@ -280,9 +259,9 @@ end
 % Criteria for BL (threshold = 0.5 seg):
 
 [rowstoelim,~ ] = find(underthresh == 1);
-rowidx = idx == rowstoelim;
-
-sortedPETH = sortedPETH(~rowidx, :);
+if ~isempty(rowstoelim)
+    sortedPETH = sortedPETH(~rowstoelim, :);
+end
 
 fig3 = figure(3);
 tiledlayout(2, 1)

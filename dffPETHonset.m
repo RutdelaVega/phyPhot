@@ -9,9 +9,7 @@ p = inputParser;
 addParameter(p,'Pre', 2,@isnumeric);
 addParameter(p,'Post', 2, @isnumeric);
 addParameter(p,'bin', 0.1, @isnumeric);
-% addParameter(p,'BinWinStart', 2, @isnumeric);
-% addParameter(p,'BinWinDuration', 1.5, @isnumeric);
-addParameter(p,'binthreshold', 0.5, @isnumeric);
+addParameter(p,'BLthreshold', 0.5, @isnumeric);
 addParameter(p,'AUCqt', 2, @isnumeric);
 addParameter(p,'AUCint', [-2 0; 0 2], @ismatrix);
 addParameter(p,'savepath', results.FP.path, @ischaracter);
@@ -21,14 +19,20 @@ parse(p,varargin{:});
 Pre = p.Results.Pre;
 Post = p.Results.Post;
 bin = p.Results.bin;
-% BinWinStart = p.Results.BinWinStart;
-% BinWinDuration = p.Results.BinWinDuration;
-threshold = p.Results.binthreshold;
+threshold = p.Results.BLthreshold;
 AUCqt = p.Results.AUCqt;
 AUCint = p.Results.AUCint;
 savepath = p.Results.savepath;
 summarymeasures = p.Results.summarymeasures;
 
+Pre = 2;
+Post = 2;
+bin = 0.1;
+threshold = 0.5;
+AUCqt = 2;
+AUCint = [-2 0; 0 2];
+savepath = results.FP.path;
+summarymeasures = ["mean", "std"];
 
 %% 1. Load data: 
 
@@ -270,10 +274,11 @@ end
 
 % Criteria for BL (threshold = 0.5 seg):
 
-[rowstoelim,~ ] = find(underthresh == 1);
-rowidx = idx == rowstoelim;
+rowstoelim = underthresh == 1;
+if ~isempty(rowstoelim)
+    sortedPETH = sortedPETH(~rowstoelim, :);
+end
 
-sortedPETH = sortedPETH(~rowidx, :);
 
 fig3 = figure(3);
 tiledlayout(2, 1)
