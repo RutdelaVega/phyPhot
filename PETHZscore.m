@@ -20,8 +20,8 @@ function [results] = PETHZscore(resultspath, method, Pre, Post, bin, varargin)
 
 
 p = inputParser;
-addParameter(p,'WinSampleStart', -3,@isnumeric);
-addParameter(p,'WinDuration', 3, @isnumeric);
+addParameter(p,'WinSampleStart', 5,@isnumeric);
+addParameter(p,'WinDuration', 4, @isnumeric);
 parse(p,varargin{:});
 WinSampleStart = p.Results.WinSampleStart;
 WinDuration = p.Results.WinDuration;
@@ -89,8 +89,6 @@ DFF = results.FP.Signals.DFF;
 
 
 
-
-
 %% 4. Use parameters to calculate PETH, AUC and Peaks (same as in pMat):
 
  bin = round(bin*Fs);
@@ -141,9 +139,9 @@ CSidx = CSidx(~isnan(CSidx));
 
 %% 8. Select method for computing and creating heatmaps:
 
-if method == 'DFF'
+if method == "DFF"
     method = 1;
-elseif method == 'baseline'
+elseif method == "baseline"
     method = 2;
 end
 
@@ -153,10 +151,8 @@ if method == 1
         DF_ZScore(:, i) = DFFZ((CSidx(i)-PreWind):(CSidx(i)+PostWind));
         DF_F(:, i) = DFF((CSidx(i)-PreWind):(CSidx(i)+PostWind));
     end
-end
 
-
-if method == 2
+elseif method == 2
 
 % 8.1. Baseline Sampling Window Params:
 
@@ -175,8 +171,11 @@ BaselineWind2=round(BaselineWind2.*Fs);
         if CSidx(i)-(BaselineWind+BaselineWind2)<=0 || CSidx(i)+PostWind > length(Ts)
         else
             CSTS=(-PreWind:PostWind)./Fs;
-            CSBL(1,:)=Ch490((CSidx(i)-(BaselineWind+BaselineWind2)):(CSidx(i)-(BaselineWind))); 
-            CSBL2(1,:)=Ch405((CSidx(i)-(BaselineWind+BaselineWind2)):(CSidx(i)-(BaselineWind)));
+%              CSBL(1,:)=Ch490((CSidx(i)-(BaselineWind+BaselineWind2)):(CSidx(i)-(BaselineWind))); 
+%               CSBL2(1,:)=Ch405((CSidx(i)-(BaselineWind+BaselineWind2)):(CSidx(i)-(BaselineWind)));
+             CSBL(1,:)=Ch490(CSidx(i)-(BaselineWind)-1:CSidx(i)-BaselineWind+BaselineWind2); 
+             CSBL2(1,:)=Ch405(CSidx(i)-(BaselineWind)-1:CSidx(i)-BaselineWind+BaselineWind2);
+
             if i>length(CSidx)
              break
             elseif i<=length(CSidx) 
@@ -186,12 +185,15 @@ BaselineWind2=round(BaselineWind2.*Fs);
             end
 
             %Smooth to eliminate high frequency noise.
-            F490=smooth(CS490,0.002,'lowess');  %Was 0.002- DJB
-            F405=smooth(CS405,0.002,'lowess'); 
-            F490CSBL=smooth(CSBL,0.002,'lowess');  %Was 0.002- DJB
-            F405CSBL=smooth(CSBL2,0.002,'lowess');
+%             F490=smooth(CS490,0.002,'lowess');  %Was 0.002- DJB
+%              F405=smooth(CS405,0.002,'lowess'); 
+%              F490CSBL=smooth(CSBL,0.002,'lowess');  %Was 0.002- DJB
+%              F405CSBL=smooth(CSBL2,0.002,'lowess');
 
-
+            F490=smooth(CS490,299,'moving');  %Was 0.002- DJB
+             F405=smooth(CS405,299,'moving'); 
+            F490CSBL=smooth(CSBL,299,'moving');  %Was 0.002- DJB
+            F405CSBL=smooth(CSBL2,299,'moving');
             
             %Scale and fit data
             bls=polyfit(F405(1:end),F490(1:end),1);
@@ -203,12 +205,12 @@ BaselineWind2=round(BaselineWind2.*Fs);
             %event window by median of baseline window.
             DF_Event(:,i)=(F490(:,1)-Y_Fit(:,1)); 
             DF_F(:,i)=DF_Event(:,i)./(Y_Fit); 
-            DF_F(:,i)=DF_F(:,i)-DF_F(1,i);
+%             DF_F(:,i)=DF_F(:,i)-DF_F(1,i);
             
             DF_Event(:,i)=(F490(:,1)-Y_Fit(:,1));
-            DF_Event(:,i)=DF_Event(:,i)-DF_Event(1,i); 
+%             DF_Event(:,i)=DF_Event(:,i)-DF_Event(1,i); 
             DF_Base(:,i)=(F490CSBL(:,1)-Y_Fit_base(:,1));
-            DF_Base(:,i)=DF_Base(:,i)-DF_Base(1,i); 
+%             DF_Base(:,i)=DF_Base(:,i)-DF_Base(1,i); 
             DF_ZScore(:,counter)=(DF_Event(:,i)-median(DF_Base(:,i)))./mad(DF_Base(:,i)); 
             counter=counter+1;
             %%% Clearing variables to reset for the next trial        
@@ -232,7 +234,7 @@ tmp=[];tmp2=[];
         tmp2(:,end+1)=median(DF_F(:,i:i+bin),2);
         end
     end
-    CSTS3=tmp;
+    CSTS3=tmp; 
     DF_F=tmp2;
 
 CSTrace2=(mean(DF_F,1)*100);
