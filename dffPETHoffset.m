@@ -214,10 +214,12 @@ if summarymeasures(2) == "std"
     PETHd = std(PETHfreez, 1, 'omitnan');
 elseif summarymeasures(2) == "sem"
     PETHd = std(PETHfreez, 1, 'omitnan')./sqrt(size(PETHfreez, 1));
-elseif summarymeasure(2) == "ci"
+elseif summarymeasures(2) == "ci"
     SEM = td(PETHfreez, 1, 'omitnan')./sqrt(size(PETHfreez, 1));               % Standard Error
     ts = tinv([0.025  0.975],size(PETHfreez, 1)-1);      % T-Score
     PETHd = mean(PETHfreez, 1, 'omitnan') + ts*SEM;                      % Confidence Intervals
+elseif summarymeasures(2) == "mad"
+    PETHd = mad(PETHfreez);
 end
 
 
@@ -305,10 +307,12 @@ if summarymeasures(2) == "std"
     udPETHd = std(udPETHdata, 1, 'omitnan');
 elseif summarymeasures(2) == "sem"
     udPETHd = std(udPETHdata, 1, 'omitnan')./sqrt(size(udPETHdata, 1));
-elseif summarymeasure(2) == "ci"
+elseif summarymeasures(2) == "ci"
     SEM = td(udPETHdata, 1, 'omitnan')./sqrt(size(udPETHdata, 1));               % Standard Error
     ts = tinv([0.025  0.975],size(udPETHdata, 1)-1);      % T-Score
     udPETHd = mean(udPETHdata, 1, 'omitnan') + ts*SEM;                      % Confidence Intervals
+elseif summarymeasures(2) == "mad"
+    udPETHd = mad(udPETHdata);
 end
 
 
