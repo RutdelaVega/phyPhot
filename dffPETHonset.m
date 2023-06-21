@@ -87,7 +87,7 @@ EVDFF = EVdata;
 
 % COMPLETE DATA WITH OVERLAP
 
-for ii = 1:length(Events)
+for ii = 1:size(Events, 1)
     if ii == 1
         EVDFF(ii, :) = DFF(FPtimestamps(ii, 1):FPtimestamps(ii, 1)+ PostWind -1);
         if (FPtimestamps(ii, 1) - PreWind - 1) < 0 % que exceda por deltante
@@ -99,7 +99,7 @@ for ii = 1:length(Events)
         else % caso normal
             BLDFF(ii, :) = DFF(FPtimestamps(ii, 1)-PreWind:FPtimestamps(ii, 1)-1);
         end
-    elseif ii >1 && ii < length(Events)
+    elseif ii >1 && ii < size(Events, 1)
         if (FPtimestamps(ii, 1) - PreWind - 1) < 0 % Que exceda por delante
             BLDFF(ii, :) = [nan([1 abs(FPtimestamps(ii, 1) - PreWind - 1)]) DFF(1:FPtimestamps(ii, 1)-1)];
             EVDFF(ii, :) = DFF(FPtimestamps(ii, 1):FPtimestamps(ii, 1)+ PostWind-1);
@@ -113,14 +113,15 @@ for ii = 1:length(Events)
             EVDFF(ii, :) = DFF(FPtimestamps(ii, 1):FPtimestamps(ii, 1)+ PostWind -1);
         end
 
-    elseif ii == length(Events)
-        if (FPtimestamps(ii, 2) +1 + PostWind) > length(DFF)
+    elseif ii == size(Events, 1)
+        if (FPtimestamps(ii, 1) + PostWind -1) > length(DFF)
+%         if (FPtimestamps(ii, 2) +1 + PostWind) > length(DFF)
             nansize = (PostWind - length(DFF(FPtimestamps(ii, 1):end))) ;
             BLDFF(ii, :) = DFF(FPtimestamps(ii, 1)-PreWind:FPtimestamps(ii, 1)-1);
             EVDFF(ii, :) = [DFF(FPtimestamps(ii, 1):end), nan([1 nansize ])];
         else % caso normal
             BLDFF(ii, :) = DFF(FPtimestamps(ii, 1)-PreWind:FPtimestamps(ii, 1)-1);
-            EVDFF(ii, :) = DFF(FPtimestamps(ii, 1):FPtimestamps(ii, 1)+ PostWind);
+            EVDFF(ii, :) = DFF(FPtimestamps(ii, 1):FPtimestamps(ii, 1)+ PostWind -1);
         end
     end
 end
@@ -462,6 +463,12 @@ if ~isempty(AUCsamelen)
     %xlsx3 = writetable(samelen);
 end
 
+%% Calculate n for each value in mean:
+
+idxPETH = ~isnan(PETHfreez); nint = sum(idxPETH, 1);
+idxudPETH = ~isnan(udPETHdata); nintud = sum(idxudPETH, 1);
+
+
 
 %% 12. Save all data and figures: 
 
@@ -548,9 +555,11 @@ writetable(udPETHdata2, xlsx7, 'WriteVariableNames', true);
 
 
 % Mean + sem:
+summaryPETH = table(PETHts.', PETHm.', PETHd.', nint.', 'VariableNames', {'Time' char(summarymeasures(1)) char(summarymeasures(2)) 'n'});
+udsummaryPETH = table(udPETHts.', udPETHm.', udPETHd.', nintud.', 'VariableNames', {'Time' char(summarymeasures(1)) char(summarymeasures(2)) 'n'});
 
-summaryPETH = table(PETHts.', PETHm.', PETHd.', 'VariableNames', {'Time' char(summarymeasures(1)) char(summarymeasures(2))});
-udsummaryPETH = table(udPETHts, udPETHm, udPETHd, 'VariableNames', {'Time' char(summarymeasures(1)) char(summarymeasures(2))});
+% summaryPETH = table(PETHts.', PETHm.', PETHd.', 'VariableNames', {'Time' char(summarymeasures(1)) char(summarymeasures(2))});
+% udsummaryPETH = table(udPETHts.', udPETHm.', udPETHd.', 'VariableNames', {'Time' char(summarymeasures(1)) char(summarymeasures(2))});
 
 xlsx8 = strcat(results.FP.path, '/Data/onsetPETH/summaryPETH.xlsx');
 xlsx9 = strcat(results.FP.path, '/Data/onsetPETH/udsummaryPETH.xlsx');

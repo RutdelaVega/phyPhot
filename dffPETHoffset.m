@@ -76,10 +76,10 @@ nansizepre = abs(boutdurTS - size(EVdata, 2)) - 1;
 
 % COMPLETE DATA WITH OVERLAP
 
-for ii = 1:length(Events)
+for ii = 1:size(Events, 1)
     if ii == 1
         BLDFF(ii, :) = DFF(FPtimestamps(ii, 2)+1:FPtimestamps(ii, 2)+PostWind);
-        if (FPtimestamps(ii, 1) - PreWind) < 0 % que exceda por deltante
+        if (FPtimestamps(ii, 2) - PreWind) < 0 % que exceda por deltante
             % añadir tantos nans por delante == desde inicio de freezing hasta
             % distancia que haya para llegar a PreWind muestras (osea PreWind -
             % las muestras que haya en ese intervalo >> boutdurTS) PreWind -
@@ -88,8 +88,8 @@ for ii = 1:length(Events)
         else % caso normal
             EVDFF(ii, :) = DFF(FPtimestamps(ii, 2)-PreWind+1:FPtimestamps(ii, 2));
         end
-    elseif ii >1 && ii < length(Events)
-        if (FPtimestamps(ii, 1) - PreWind) < 0 % Que exceda por delante
+    elseif ii >1 && ii < size(Events, 1)
+        if (FPtimestamps(ii, 2) - PreWind) < 0 % Que exceda por delante
             BLDFF(ii, :) = DFF(FPtimestamps(ii, 2)+1:FPtimestamps(ii, 2)+PostWind);
             EVDFF(ii, :) = [nan([1 nansizepre(ii)]) DFF(FPtimestamps(ii, 1):FPtimestamps(ii, 2))];
         elseif (FPtimestamps(ii, 2) +1 + PostWind) > length(DFF) % Que exceda por detrás
@@ -102,8 +102,8 @@ for ii = 1:length(Events)
             EVDFF(ii, :) = DFF(FPtimestamps(ii, 2)-PreWind+1:FPtimestamps(ii, 2));
         end
 
-    elseif ii == length(Events)
-        if (FPtimestamps(ii, 2) +1 + PostWind) > length(DFF)
+    elseif ii == size(Events, 1)
+        if (FPtimestamps(ii, 2) + PostWind) > length(DFF)
             nansize = (PostWind - length(DFF(FPtimestamps(ii, 2)+1:end)));
             BLDFF(ii, :) = [DFF(FPtimestamps(ii, 2)+1:end) nan([1 nansize])];
             EVDFF(ii, :) = DFF(FPtimestamps(ii, 2)-PreWind+1:FPtimestamps(ii, 2));            
@@ -157,10 +157,15 @@ end
 
 for nn = 1:size(BLdata)
 
+    if sum(~isnan(nanBLDFF(nn, :))) < 2
+        EvDFFZ(nn, :) = nan([1 size(nanEVDFF, 2)]);
+        BLDFFZ(nn, :) = nan([1 size(nanBLDFF, 2)]);
+    else
     BLmed(nn) = median(nanBLDFF(nn, :), 'omitnan'); BLmad(nn) = mad(nanBLDFF(nn, :));
     EvDFFZ(nn, :) = (nanEVDFF(nn, :) - BLmed(nn))./BLmad(nn);  % DFFZ on baseline
 % WITH NORMALIZATION OF BL:
-     BLDFFZ(nn, :) = (nanBLDFF(nn, :) - BLmed(nn))./BLmad(nn);
+    BLDFFZ(nn, :) = (nanBLDFF(nn, :) - BLmed(nn))./BLmad(nn);
+    end
 end
 
 
@@ -375,7 +380,7 @@ boutdursamelen = boutdur(indx == AUCqt, :);
 
 measurenames1 = {'AUCpre', 'AUCpost', 'DENSpre (Apre/n)', 'DENSpost(Apost/n)', 'durpre (s)', 'boutdur (s)'};
 
-prepostFP = table(AUCbl.', AUCev.', densbl.', densev.', tbl.', boutdur, 'VariableNames', measurenames1);
+prepostFP = table(AUCev.',AUCbl.', densev.', densbl.', tbl.', boutdur, 'VariableNames', measurenames1);
 
 
 % Data 2 and 3 (even if empty):
@@ -405,6 +410,11 @@ if ~isempty(AUCsamelen)
     samelenFP = array2table([AUCsamelen DENSsamelen AUCdursamelen boutdursamelen], 'VariableNames', measurenames2);
     %xlsx3 = writetable(samelen);
 end
+
+%% Calculate n for each value in mean:
+
+idxPETH = ~isnan(PETHfreez); nint = sum(idxPETH, 1);
+idxudPETH = ~isnan(udPETHdata); nintud = sum(idxudPETH, 1);
 
 %% 12. Save all data and figures: 
 
@@ -439,7 +449,7 @@ results.PETH.offset.BLDFFZ = BLDFFZ;
 
 
 % Figures: 
-
+% savepath = uigetdir();
 folderpath1 = strcat(savepath, '/Figures');
 folderpath2 = strcat(savepath, '/Data');
 mkdir(folderpath1, 'offsetPETH');
@@ -492,8 +502,8 @@ writetable(udPETHdata2, xlsx7, 'WriteVariableNames', true);
 
 % Mean + sem:
 
-summaryPETH = table(PETHts.', PETHm.', PETHd.', 'VariableNames', {'Time' char(summarymeasures(1)) char(summarymeasures(2))});
-udsummaryPETH = table(udPETHts, udPETHm, udPETHd, 'VariableNames', {'Time' char(summarymeasures(1)) char(summarymeasures(2))});
+summaryPETH = table(PETHts.', PETHm.', PETHd.', nint.', 'VariableNames', {'Time' char(summarymeasures(1)) char(summarymeasures(2)) 'n'});
+udsummaryPETH = table(udPETHts.', udPETHm.', udPETHd.', nintud.', 'VariableNames', {'Time' char(summarymeasures(1)) char(summarymeasures(2)) 'n'});
 
 xlsx8 = strcat(results.FP.path, '/Data/offsetPETH/offsummaryPETH.xlsx');
 xlsx9 = strcat(results.FP.path, '/Data/offsetPETH/offudsummaryPETH.xlsx');
