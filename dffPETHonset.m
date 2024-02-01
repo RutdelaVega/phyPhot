@@ -32,14 +32,17 @@ BehFs = results.Behavior.Fs;
 evsamp = results.Behavior.Event.Time;
 Events = evsamp./BehFs; 
 FPtimestamps = round(Events.*Fs);
-DFFZ = double(results.FP.Signals.DFFModZscore);
-DFF = results.FP.Signals.DFF;
+DFF = double(results.FP.Signals.DFFModZscore).'; % ACTIVAR ESTA SI QUIERES UTILIZAR LA ZSCORE 
+% DFFZ = double(results.FP.Signals.DFFModZscore).'; NO HACER CASO
+%DFF = results.FP.Signals.DFF; % ACTIVAR ESTA SI QUIERES UTILIZAR LA DFF
+
+
 Time = results.FP.Signals.raw.Time;
 
 if Events(end, 2) > 300
     Events(end, 2) =  300; % en seg
 %     evsamp(end, 2) = 4500; % en BehFs
-    FPtimestamps(end, 2) = length(DFFZ);
+    FPtimestamps(end, 2) = length(DFF);
 end
 
 
@@ -61,7 +64,7 @@ overlap =  evdif < Pre;
 % checklast = Events(end, 2) + Post;
 
 
-%% 4. Check if first event is to close to the beginning and needs also binsize correction
+%% 4. Check if first event is too close to the beginning and needs also binsize correction
 
 % if checkfirst < Pre
 %     binsizeperev(1) = round(Events(1, 1)*Fs); % es esta Fs porque el binsize se coge en función de BHD. 
@@ -99,14 +102,14 @@ for ii = 1:size(Events, 1)
         else % caso normal
             BLDFF(ii, :) = DFF(FPtimestamps(ii, 1)-PreWind:FPtimestamps(ii, 1)-1);
         end
-    elseif ii >1 && ii < size(Events, 1)
+    elseif ii > 1 && ii < size(Events, 1)
         if (FPtimestamps(ii, 1) - PreWind - 1) < 0 % Que exceda por delante
             BLDFF(ii, :) = [nan([1 abs(FPtimestamps(ii, 1) - PreWind - 1)]) DFF(1:FPtimestamps(ii, 1)-1)];
             EVDFF(ii, :) = DFF(FPtimestamps(ii, 1):FPtimestamps(ii, 1)+ PostWind-1);
         elseif (FPtimestamps(ii, 1) + PostWind) > length(DFF) % Que exceda por detrás
             nansize = (PostWind - length(DFF(FPtimestamps(ii, 1):end))) ;
             BLDFF(ii, :) = DFF(FPtimestamps(ii, 1)-PreWind:FPtimestamps(ii, 1)-1);
-            EVDFF(ii, :) = [DFF(FPtimestamps(ii, 1):end), nan([1 nansize ])];
+            EVDFF(ii, :) = [DFF(FPtimestamps(ii, 1):end).', nan([1 nansize ])];
             % añadir nans por el final
         else % caso normal
             BLDFF(ii, :) = DFF(FPtimestamps(ii, 1)-PreWind:FPtimestamps(ii, 1)-1);
@@ -118,7 +121,7 @@ for ii = 1:size(Events, 1)
 %         if (FPtimestamps(ii, 2) +1 + PostWind) > length(DFF)
             nansize = (PostWind - length(DFF(FPtimestamps(ii, 1):end))) ;
             BLDFF(ii, :) = DFF(FPtimestamps(ii, 1)-PreWind:FPtimestamps(ii, 1)-1);
-            EVDFF(ii, :) = [DFF(FPtimestamps(ii, 1):end), nan([1 nansize ])];
+            EVDFF(ii, :) = [DFF(FPtimestamps(ii, 1):end).', nan([1 nansize ])];
         else % caso normal
             BLDFF(ii, :) = DFF(FPtimestamps(ii, 1)-PreWind:FPtimestamps(ii, 1)-1);
             EVDFF(ii, :) = DFF(FPtimestamps(ii, 1):FPtimestamps(ii, 1)+ PostWind -1);
@@ -248,7 +251,8 @@ yline(mean(mean(BLDFFZ, 1, 'omitnan'), 'omitnan'), '-', 'LineWidth', 1)
 
 
 fig2 = figure(2);
-plot(Time, DFFZ)
+plot(Time, DFF)
+% plot((0:length(DFF)-1)./Fs, DFF)
 hold on
 for ii = 1:size(Events, 1)
     xline(Events(ii, 1), '-g')
@@ -297,7 +301,7 @@ tiledlayout(2, 1)
 nexttile
 h = imagesc(udPETHts, 1:size(udPETHdata, 1), udPETHdata);
 set(h, 'AlphaData', ~isnan(udPETHdata))
-clim([-5 5])
+% clim([-5 5])
 nexttile
 plot(udPETHts, median(udPETHdata, 1, 'omitnan'), 'LineWidth', 2);
 xlim([min(udPETHts) max(udPETHts)])

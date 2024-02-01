@@ -1,5 +1,5 @@
 
-function [results] = fp_preproc(TDTdata, varargin)
+function [results] = artifact_fp_preproc(TDTdata, varargin)
 
 % Visualize your raw signals, correct artifacts if necessary and normalize
 % data for further processing.
@@ -95,12 +95,21 @@ Time = (0:(length(GCAMP)-1))./Fs;
 
 %% 3. Plot raw signal (to check for artifacts) and save result:
 
+
+% Calculate signal quality: 
+
+signalquality = corrcoef(GCAMP, Isos);
+number = {'Corrcoef:' num2str(signalquality(1, 2))};
+
+% Plot
+
 fig2 = figure(2); 
 plot(Time, GCAMP, 'Color', [0,0.7,0.9]);
-hold on;
+hold on
 plot(Time, Isos, 'Color', [0.4940 0.1840 0.5560]);
-hold off;
+hold off
 legend('GCamP', 'Isosbestic');
+text(Time(end), min(GCAMP), number,'Color','red','FontSize',8)
 
 fig2path = strcat(figpath, '/RawSignalswSB.jpg');
 saveas(fig2, fig2path); 
@@ -108,6 +117,43 @@ saveas(fig2, fig2path);
 results.FP.Signals.raw.GCAMP = GCAMP;
 results.FP.Signals.raw.Isos = Isos;
 results.FP.Signals.raw.Time = Time;
+
+
+
+% 3.0. Prueba con pass-band filter 15 Hz low-pass: 
+
+   applyfilter = questdlg('Would you like to apply a 15 Hz low-pass filter on your data?');
+
+        switch applyfilter
+            case 'Yes'
+               applyfilter = 1;
+            case 'No'
+               applyfilter = 0;
+        end
+
+% Filter
+    
+    if applyfilter == 1
+        fc=20;% cut off frequency
+        fn=Fs; %nyquivst frequency = sample frequency/2;
+        order = 2; %6th order filter, low pass
+        [b14, a14]=butter(order,(fc/fn),'low');
+
+        GCAMP = filtfilt(b14,a14,double(GCAMP)); 
+        Isos = filtfilt(b14, a14, double(Isos));
+
+        
+        fig22 = figure(22); 
+plot(Time, GCAMP, 'Color', [0,0.7,0.9]);
+hold on;
+plot(Time, Isos, 'Color', [0.4940 0.1840 0.5560]);
+hold off;
+legend('GCamP', 'Isosbestic');
+title('signals with 15 Hz filter')
+
+    end
+
+
 
 
 % 3.1. Choose whether or not you want to correct for jump artifacts: 
@@ -134,6 +180,7 @@ if correctartifact == 1
     results.FP.params.artifact.quant = art_quant;
 
 end
+
 
 % 3.2. Select where to make the cut for jump artifacts (based on Julio
 % Esparza's function: Fiber_photometry_GCaMPf.m):
@@ -191,7 +238,7 @@ if correctartifact == 1
         elseif signaltocorrect == 2   
             plot(Timetocorrect, Isostocorrect)
             uiwait(msgbox('Select first left side, then right side of jump', 'Instructions', "modal"));
-            [x, y, button] = ginput(2);
+            [x, ~, ~] = ginput(2);
 
             leftidx = floor((x(1)).*Fs);
             rightidx = round((x(2)).*Fs);
@@ -260,9 +307,9 @@ if correctartifact == 1
 
         fig3 = figure(3);
         plot(Time, GCAMP, 'Color', [0,0.7,0.9]);
-        hold on;
+        hold on
         plot(Time, Isos, 'Color', [0.4940 0.1840 0.5560]);
-        hold off;
+        hold off
         legend('GCamP', 'Isosbestic');
         title('Corrected Signals')
 
@@ -284,7 +331,6 @@ if correctartifact == 1
     results.FP.Signals.corrected.GCAMP = GCAMP;
     results.FP.Signals.corrected.Isos = Isos;
 end
-
 
 
 
@@ -385,7 +431,6 @@ if correctbleaching == 1
     ind(isnan(ind)) = [];
     temp_t = [temp_t; Time(ind)];
     temp_s = [temp_s; GCAMP(ind)];
-    temp_i = [temp_i; Isos(indIso)];
     ind = [];
     end 
 
@@ -461,22 +506,107 @@ if correctbleaching == 1
 
 end
 
+%% Prueba como Guppy para quedarnos con los trozos que nos interesan: 
 
+keepsignal = questdlg('Would you like to remove part of the signal?');
+
+switch keepsignal
+    case 'Yes'
+        keepsignal = 1;
+    case 'No'
+        keepsignal = 0;
+end
+
+signaltstokeep = [];
+
+if keepsignal == 1
+
+        fig31 = figure(31);
+        plot(GCAMP, 'Color', [0,0.7,0.9]);
+        hold on
+        plot(Isos, 'Color', [0.4940 0.1840 0.5560]);
+        hold off
+        legend('GCamP', 'Isosbestic');
+        title('Corrected Signals')
+
+
+
+    for ii = 1:100
+       uiwait(msgbox('Select first onset, then offset of signal to keep', 'Instructions', "modal"));
+       [x, ~, ~] = ginput(2);
+       signaltstokeep(ii, :) = [x(1) x(2)];
+       
+       keepmore = questdlg('Do you want to select more chunks to keep?:');
+
+       switch keepmore
+           case 'Yes'
+               keepmore = 1;
+           case 'No'
+               keepmore = 0;
+       end
+
+       if keepmore == 1
+           continue
+       elseif keepmore == 0
+           break
+       end
+
+    end
+end
+
+if keepsignal == 1
+
+    if signaltstokeep(end, 2) > length(GCAMP)
+        signaltstokeep(end, 2) = length(GCAMP);
+    end
+
+    signaltstokeep = int32(signaltstokeep);
+
+    nanGCAMP = nan(1, length(GCAMP));
+    nanIsos = nan(1, length(Isos));
+
+    for ii = 1:size(signaltstokeep, 1)
+        nanGCAMP(signaltstokeep(ii, 1):signaltstokeep(ii, 2)) = GCAMP(signaltstokeep(ii, 1):signaltstokeep(ii, 2));
+        nanIsos(signaltstokeep(ii, 1):signaltstokeep(ii, 2)) = Isos(signaltstokeep(ii, 1):signaltstokeep(ii, 2));
+    end
+
+    fig32 = figure(32);
+    plot(Time, nanGCAMP,'Color', [0,0.7,0.9])
+    hold on
+    plot(Time, nanIsos, 'Color', [0.4940 0.1840 0.5560])
+    hold off
+    legend('GCamP', 'Isosbestic');
+    title('Signals to keep')
+
+    GCAMP = nanGCAMP;
+    Isos = nanIsos;
+end
 
 %% 5. Smooth signals:
 
-if SmoothMethod == 'Moving Average'
-    method = 'moving';
-    smwin = 299;
-elseif SmoothMethod == 'Lowess'
-    method = 'lowess';
-    smwin = 0.002;
-end
 
-    GCAMPsm = smooth(GCAMP, smwin, method);
-    Isossm = smooth(Isos, smwin, method);
+    if SmoothMethod == 'Moving Average'
+        method = 'moving';
+        smwin = 299;
+    elseif SmoothMethod == 'Lowess'
+        method = 'lowess';
+        smwin = 0.002;
+    end
+    
+    if keepsignal == 1
+        GCAMPsm = nan(1, length(GCAMP));
+        Isossm = GCAMPsm;
+        for ii = 1:size(signaltstokeep, 1)
+            GCAMPsm(signaltstokeep(ii, 1):signaltstokeep(ii, 2)) = smooth(GCAMP(signaltstokeep(ii, 1):signaltstokeep(ii, 2)), smwin, method);
+            Isossm(signaltstokeep(ii, 1):signaltstokeep(ii, 2)) = smooth(Isos(signaltstokeep(ii, 1):signaltstokeep(ii, 2)), smwin, method);
+        end
+        
+    elseif keepsignal == 0
+        GCAMPsm = smooth(GCAMP(~isnan(GCAMP)), smwin, method);
+        Isossm = smooth(Isos(~isnan(Isos)), smwin, method);
+    end
 
-    fig5 = figure(5) 
+    fig5 = figure(5); 
     plot(Time, GCAMPsm, 'Color', [0,0.7,0.9]);
     hold on;
     plot(Time, Isossm, 'Color', [0.4940 0.1840 0.5560]);
@@ -484,45 +614,118 @@ end
     legend('GCamP', 'Isosbestic');
     title('Smoothed Signals')
 
-% Save data and plot:
+    % Save data and plot:
 
-results.FP.params.filter.method = method;
-results.FP.params.filter.span = smwin;
+    results.FP.params.filter.method = method;
+    results.FP.params.filter.span = smwin;
 
-results.FP.Signals.smoothed.Time = Time;
-results.FP.Signals.smoothed.GCAMP = GCAMPsm.';
-results.FP.Signals.smoothed.Isos = Isossm.';
+    results.FP.Signals.smoothed.Time = Time;
+    results.FP.Signals.smoothed.GCAMP = GCAMPsm.';
+    results.FP.Signals.smoothed.Isos = Isossm.';
 
-fig5path = strcat(figpath, '/SmoothedSignals.jpg');
-saveas(fig5, fig5path);
+    fig5path = strcat(figpath, '/SmoothedSignals.jpg');
+    saveas(fig5, fig5path);
 
 %% 6. Normalize signals:
 
 % 6.1.. DF/F of signal: 
 
-bls = polyfit(Isossm(1:end), GCAMPsm(1:end), 1);
-yfit = bls(1).*Isossm + bls(2);
-DeltaF = (GCAMPsm(:)-yfit(:)) ./ (yfit(:));
+if keepsignal == 1
 
-fig6 = figure(6)
-plot(Time, DeltaF, 'Color', [0,0.7,0.9])
-title('Delta F of F')
+DF = nan(1, length(GCAMP));
 
-% Save data and figure DFF:
+    for ii = 1:size(signaltstokeep, 1)
+        
+        bls = polyfit(Isossm(signaltstokeep(ii, 1):signaltstokeep(ii, 2)), GCAMPsm(signaltstokeep(ii, 1):signaltstokeep(ii, 2)), 1);
+        yfit = bls(1).*Isossm(signaltstokeep(ii, 1):signaltstokeep(ii, 2)) + bls(2);
+        DeltaF = (GCAMPsm(signaltstokeep(ii, 1):signaltstokeep(ii, 2))-yfit) ./ (yfit);
+        
+        DF(signaltstokeep(ii, 1):signaltstokeep(ii, 2)) = DeltaF;
+        
+    end
 
-results.FP.Signals.DFF = DeltaF.';
 
-fig6path = strcat(figpath, '/DFF.jpg');
-saveas(fig6, fig6path);
+    fig6 = figure(6);
+    plot(Time, DF, 'Color', [0,0.7,0.9])
+    title('Delta F of F')
+    yline(0)
+    DeltaF = DF;
+
+    % Save data and figure DFF:
+
+    results.FP.Signals.DFF = DeltaF.';
+
+    fig6path = strcat(figpath, '/DFF.jpg');
+    saveas(fig6, fig6path);
+
+
+elseif keepsignal == 0
+
+    bls = polyfit(Isossm(1:end), GCAMPsm(1:end), 1);
+    yfit = bls(1).*Isossm + bls(2);
+    DeltaF = (GCAMPsm(:)-yfit(:)) ./ (yfit(:));
+
+    fig6 = figure(6);
+    plot(Time, DeltaF, 'Color', [0,0.7,0.9])
+    title('Delta F of F')
+
+    % Save data and figure DFF:
+
+    results.FP.Signals.DFF = DeltaF.';
+
+    fig6path = strcat(figpath, '/DFF.jpg');
+    saveas(fig6, fig6path);
+
+end
 
 
 % 6.2. Calculate Z-Score by the chosen method and plot the signal with
 % selected methods and save data:
 
-if ZScoreMethod == "Z-Score"
 
+if keepsignal == 1
+    if ZScoreMethod == "Z-Score"
+        DFZscore = nan(1, length(GCAMP));
+        for ii = 1:size(signaltstokeep, 1)
+         DFZ = zscore(DeltaF(signaltstokeep(ii, 1):signaltstokeep(ii, 2)));
+         DFZscore(signaltstokeep(ii, 1):signaltstokeep(ii, 2)) = DFZ;
+        end
+        fig7 = figure(7); 
+        plot(Time, DFZscore, 'Color', [0,0.7,0.9]);
+        hold on
+        legend('Delta F Z-Score');
+        hold off
+        title('Delta F/F Z-Score')
+
+        results.FP.Signals.DFFZscore = DFZscore.';
+
+        fig7path = strcat(figpath, '/DFFZScore.jpg');
+        saveas(fig7, fig7path);
+    elseif ZScoreMethod == "Modified Z-Score"
+        DFmodscore = nan(1, length(GCAMP));
+        for ii = 1:size(signaltstokeep, 1)
+           DFZmod = (0.6745.*(DeltaF(signaltstokeep(ii, 1):signaltstokeep(ii, 2))-(median(DeltaF(signaltstokeep(ii, 1):signaltstokeep(ii, 2))))))/mad(DeltaF(signaltstokeep(ii, 1):signaltstokeep(ii, 2)));
+           DFmodscore(signaltstokeep(ii, 1):signaltstokeep(ii, 2)) = DFZmod;
+        end
+        fig7 = figure(7);
+        plot(Time, DFmodscore, 'Color', [0,0.7,0.9]);
+        hold on
+        legend('Delta F Modified Z-Score');
+        hold off
+        title('Delta F/F Modified Z-Score')
+
+        results.FP.Signals.DFFModZscore = DFmodscore.';
+
+        fig7path = strcat(figpath, '/DFFModZScore.jpg');
+        saveas(fig7, fig7path);
+    end
+
+
+elseif keepsignal == 0
+    if ZScoreMethod == "Z-Score"
+        
         DFZscore = zscore(DeltaF);
-        fig7 = figure(7) 
+        fig7 = figure(7); 
         plot(Time, DFZscore, 'Color', [0,0.7,0.9]);
         hold on
         legend('Delta F Z-Score');
@@ -535,7 +738,7 @@ if ZScoreMethod == "Z-Score"
         saveas(fig7, fig7path);
 
 
-elseif ZScoreMethod == "Modified Z-Score"
+    elseif ZScoreMethod == "Modified Z-Score"
 
         DFmodscore = (0.6745.*(DeltaF-(median(DeltaF))))/mad(DeltaF);
         fig7 = figure(7);
@@ -549,8 +752,8 @@ elseif ZScoreMethod == "Modified Z-Score"
 
         fig7path = strcat(figpath, '/DFFModZScore.jpg');
         saveas(fig7, fig7path);
+    end
 end
-
 
 
 
@@ -561,5 +764,4 @@ results.FP.path = TDTdata.path;
 save(resultspath, 'results');
 
 end
-
 
