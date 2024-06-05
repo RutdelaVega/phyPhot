@@ -24,13 +24,14 @@ TDTdata = fp2mat(mypath, filename);
 % For freezing files with pulse index (indicating the beginning of fear
 % conditioning test), execute the following function:
 
-TDTdata = cut2wav(); % It cuts the signal specifically to 5 minutes of behavior
+% TDTdata = cut2wav(); % It cuts the signal specifically to 5 minutes of behavior
 
 % TDTdata is loaded to current workspace
 
 %% 2. Extract, process and plot raw data to detect noise, major artifacts, etc. 
 
-results = fp_preproc(TDTdata, 'SampleBuffer', [0 0]);
+results = fp_preproc(TDTdata, 'SampleBuffer', [5 5]);
+results = artifact_fp_preproc(TDTdata, 'SampleBuffer', [5 5]);
 
 %% 3. Extract behavioral data separately:
 

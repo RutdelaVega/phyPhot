@@ -1,7 +1,30 @@
 
-function [results] = dffPETHoffset(results, varargin)
+function [results] = dffPETHoffset(contvar, fscontvar, evsamp, fsev, combiname, savepath, varargin)
 
-%% dffPETHoffset plots and analyzes end of behavior events
+%% dffPETHoffset plots and analyzes end of behavior events starting from the end of the event
+% INPUTS:
+%   contvar (vector): continuous variable that you want to allign with specific
+%  events (z values). DFF, velocity, acceleration, etc. 
+%   fscontvar (escalar): frequency sampling of contvar
+%   evsamp (two col matrix): matrix of two columns containing onset sample and offset sample of such
+%  events. This could be: freezing, shocks, movement, etc. 
+%   fsev (escalar): frequency sampling of events, needed as the fs could be different
+%  for those two variables. 
+%   savepath (string): where to save all the data
+
+% OPTIONAL: 
+%  Pre (s): start of PETH window. Ex: 2 is -2 seconds before event. 
+%  Post (s): end of PETH window. 2 is duration of event 2 seconds after
+%  start
+%  bin: size of each square in the PETH
+%  threshold (s): criteria to eliminate events (or not show them)
+%  AUCqt (n): how many AUC to calculate
+%  AUCint (s): intervals to get information from (coherent with PETH
+%  window size)
+%  summarymeasures (string): which measures to extract for later
+%  quantitative analysis.
+%  maxlength (s): max length of your recording/file/etc.  
+
 
 p = inputParser;
 addParameter(p,'Pre', 2,@isnumeric);
@@ -10,8 +33,9 @@ addParameter(p,'bin', 0.1, @isnumeric);
 addParameter(p,'BLthreshold', 0.5, @isnumeric);
 addParameter(p,'AUCqt', 2, @isnumeric);
 addParameter(p,'AUCint', [-2 0; 0 2], @ismatrix);
-addParameter(p,'savepath', results.FP.path, @ischaracter);
+% addParameter(p,'savepath', results.FP.path, @ischaracter);
 addParameter(p,'summarymeasures', ["mean", "std"], @isstring);
+addParameter(p,'maxlength', 300 ,@isnumeric);
 
 parse(p,varargin{:});
 Pre = p.Results.Pre;
@@ -20,32 +44,46 @@ bin = p.Results.bin;
 threshold = p.Results.BLthreshold;
 AUCqt = p.Results.AUCqt;
 AUCint = p.Results.AUCint;
-savepath = p.Results.savepath;
 summarymeasures = p.Results.summarymeasures;
+maxlength = p.Results.maxlength;
 
 %% 1. Load data: 
 
-
-Fs = results.FP.params.fs;
-BehFs = results.Behavior.Fs;
-evsamp = results.Behavior.Event.Time;
-Events = evsamp./BehFs; 
-if Events(end, 2) > 300
-    Events(end, 2) =  300; % en seg
-    evsamp(end, 2) = 4500; % en BehFs
+% 
+% Fs = results.FP.params.fs;
+% BehFs = results.Behavior.Fs;
+% evsamp = results.Behavior.Event.Time;
+Events = evsamp./fsev; 
+tscontvar = round(Events.*fscontvar);
+Time = (0:length(contvar)-1)./fscontvar;
+if Events(end, 2) > maxlength
+    Events(end, 2) =  maxlength; % en seg
+    tscontvar(end, 2) = length(contvar); % en fs de contvar (DFF por ej)
 end
 
-DFFZ = double(results.FP.Signals.DFFModZscore);
-DFF = results.FP.Signals.DFF;
-Time = results.FP.Signals.raw.Time;
+if size(contvar, 1) > size(contvar, 2)
+    contvar = contvar.';
+end
+
+% DFFZ = double(results.FP.Signals.DFFModZscore);
+% DFF = results.FP.Signals.DFF;
+% Time = results.FP.Signals.raw.Time;
 
 %% 2. Variables for PETH: 
 
- binsize = round(bin*Fs); % Unit is in samples, if each bin represents 0.2 seconds, then how many samples are within 0.2 seconds (in FP fs)
- PreWind = round(Pre*Fs);
- PostWind = round(Post*Fs);
+%  binsize = round(bin*Fs); % Unit is in samples, if each bin represents 0.2 seconds, then how many samples are within 0.2 seconds (in FP fs)
+%  PreWind = round(Pre*Fs);
+%  PostWind = round(Post*Fs);
+
+ binsize = bin*fsev; 
+ PreWind = Pre*fsev;
+ PostWind = Post*fsev;
+
+ Precontvar = round(Pre*fscontvar);
+ Postcontvar = round(Post*fscontvar);
+
 % Transform timestamps in BHD to timestamps in GCAMP:
-FPtimestamps = round(Events.*Fs);
+% FPtimestamps = round(Events.*Fs); % ya está en tscontvar
 
 
 
@@ -53,23 +91,21 @@ FPtimestamps = round(Events.*Fs);
 
 evdif = Events(2:end, 1) - Events(1:end-1, 2); % Diferencia entre eventos (idx +1)
 overlap =  evdif < Post;
-boutdurTS = FPtimestamps(:, 2) - FPtimestamps(:, 1);
+boutdurTS = tscontvar(:, 2) - tscontvar(:, 1);
 
 
 
 %% 4. Max length of freezing event >> esto es la PreWIND (ahora está antes que el BL): 
 
 boutdur = Events(:, 2) - Events(:, 1);
-[val, ~] = max(boutdur); Prewfr = val; PreWind = round(Prewfr*Fs);
+[val, ~] = max(boutdur); Prewfr = val; 
+% PreWind = round(Prewfr*Fs);
 
-EVdata = zeros([size(Events, 1) PreWind]);
-BLdata = zeros([size(Events, 1) PostWind]);
+EVdata = zeros([size(Events, 1) Precontvar]);
+BLdata = zeros([size(Events, 1) Postcontvar]);
 
 
 %% 5. Extract FP data from each event and save data:
-
-EVDFF = EVdata;
-BLDFF = BLdata;
 
 nansizepre = abs(boutdurTS - size(EVdata, 2)) - 1;
 
@@ -78,38 +114,38 @@ nansizepre = abs(boutdurTS - size(EVdata, 2)) - 1;
 
 for ii = 1:size(Events, 1)
     if ii == 1
-        BLDFF(ii, :) = DFF(FPtimestamps(ii, 2)+1:FPtimestamps(ii, 2)+PostWind);
-        if (FPtimestamps(ii, 2) - PreWind) < 0 % que exceda por deltante
+        BLdata(ii, :) = contvar(tscontvar(ii, 2)+1:tscontvar(ii, 2)+Postcontvar);
+        if (contvar(ii, 2) - Precontvar) < 0 % que exceda por deltante
             % añadir tantos nans por delante == desde inicio de freezing hasta
             % distancia que haya para llegar a PreWind muestras (osea PreWind -
             % las muestras que haya en ese intervalo >> boutdurTS) PreWind -
             % boutdurTS
-            EVDFF(ii, :) = [nan([1 nansizepre(ii)]) DFF(FPtimestamps(ii, 1):FPtimestamps(ii, 2))];
+            EVdata(ii, :) = [nan([1 nansizepre(ii)]) contvar(tscontvar(ii, 1):tscontvar(ii, 2))];
         else % caso normal
-            EVDFF(ii, :) = DFF(FPtimestamps(ii, 2)-PreWind+1:FPtimestamps(ii, 2));
+            EVdata(ii, :) = contvar(tscontvar(ii, 2)-Precontvar+1:tscontvar(ii, 2));
         end
     elseif ii >1 && ii < size(Events, 1)
-        if (FPtimestamps(ii, 2) - PreWind) < 0 % Que exceda por delante
-            BLDFF(ii, :) = DFF(FPtimestamps(ii, 2)+1:FPtimestamps(ii, 2)+PostWind);
-            EVDFF(ii, :) = [nan([1 nansizepre(ii)]) DFF(FPtimestamps(ii, 1):FPtimestamps(ii, 2))];
-        elseif (FPtimestamps(ii, 2) +1 + PostWind) > length(DFF) % Que exceda por detrás
-            nansize = (PostWind - length(DFF(FPtimestamps(ii, 2)+1:end)));
-            BLDFF(ii, :) = [DFF(FPtimestamps(ii, 2)+1:end) nan([1 nansize])];
-            EVDFF(ii, :) = DFF(FPtimestamps(ii, 2)-PreWind+1:FPtimestamps(ii, 2));
+        if (tscontvar(ii, 2) - Precontvar) < 0 % Que exceda por delante
+            BLdata(ii, :) = contvar(tscontvar(ii, 2)+1:tscontvar(ii, 2)+Postcontvar);
+            EVdata(ii, :) = [nan([1 nansizepre(ii)]) DFF(tscontvar(ii, 1):tscontvar(ii, 2))];
+        elseif (tscontvar(ii, 2) +1 + Postcontvar) > length(contvar) % Que exceda por detrás
+            nansize = (Postcontvar - length(contvar(tscontvar(ii, 2)+1:end)));
+            BLdata(ii, :) = [contvar(tscontvar(ii, 2)+1:end) nan([1 nansize])];
+            EVdata(ii, :) = contvar(tscontvar(ii, 2)-Precontvar+1:tscontvar(ii, 2));
             % añadir nans por el final
         else % caso normal
-            BLDFF(ii, :) = DFF(FPtimestamps(ii, 2)+1:FPtimestamps(ii, 2)+PostWind);
-            EVDFF(ii, :) = DFF(FPtimestamps(ii, 2)-PreWind+1:FPtimestamps(ii, 2));
+            BLdata(ii, :) = contvar(tscontvar(ii, 2)+1:tscontvar(ii, 2)+Postcontvar);
+            EVdata(ii, :) = contvar(tscontvar(ii, 2)-Precontvar+1:tscontvar(ii, 2));
         end
 
     elseif ii == size(Events, 1)
-        if (FPtimestamps(ii, 2) + PostWind) > length(DFF)
-            nansize = (PostWind - length(DFF(FPtimestamps(ii, 2)+1:end)));
-            BLDFF(ii, :) = [DFF(FPtimestamps(ii, 2)+1:end) nan([1 nansize])];
-            EVDFF(ii, :) = DFF(FPtimestamps(ii, 2)-PreWind+1:FPtimestamps(ii, 2));            
+        if (tscontvar(ii, 2) + Postcontvar) > length(contvar)
+            nansize = (Postcontvar - length(DFF(tscontvar(ii, 2)+1:end)));
+            BLdata(ii, :) = [contvar(tscontvar(ii, 2)+1:end) nan([1 nansize])];
+            EVdata(ii, :) = contvar(tscontvar(ii, 2)-Precontvar+1:tscontvar(ii, 2));            
         else % caso normal
-            BLDFF(ii, :) = DFF(FPtimestamps(ii, 2)+1:FPtimestamps(ii, 2)+PostWind);
-            EVDFF(ii, :) = DFF(FPtimestamps(ii, 2)-PreWind+1:FPtimestamps(ii, 2));
+            BLdata(ii, :) = contvar(tscontvar(ii, 2)+1:tscontvar(ii, 2)+Postcontvar);
+            EVdata(ii, :) = contvar(tscontvar(ii, 2)-Precontvar+1:tscontvar(ii, 2));
         end
     end
 end
@@ -123,64 +159,68 @@ end
 overlapsize = zeros([size(overlap) 1]);
 overlapsize(overlap) = evdif(overlap) - Post;
 overlapsize = [overlapsize; 0];
-overlapsize = abs(round(overlapsize.*Fs));
+overlapsize = abs(round(overlapsize.*fscontvar));
 
-nanBLDFF = BLDFF;
+nanBLdata = BLdata;
 
 
-for jj = 1:size(BLDFF, 1)
+for jj = 1:size(BLdata, 1)
     if overlapsize(jj) == 0
         continue
     else
     nanvect = nan([1 overlapsize(jj)]);
-    nanBLDFF(jj, PostWind-overlapsize(jj)+1:PostWind) = nanvect;
+    nanBLdata(jj, Postcontvar-overlapsize(jj)+1:Postcontvar) = nanvect;
     end
 end
 
 
 % EVENT:
 
-nanEVDFF = EVDFF; % Estas vars ahora contienen nan, de ahí el nombre
+nanEVdata = EVdata; % Estas vars ahora contienen nan, de ahí el nombre
 
-boutdursamp = round(boutdur.*Fs);
-elimsample = size(EVDFF, 2) - boutdursamp;
+boutdursamp = round(boutdur.*fscontvar);
+elimsample = size(EVdata, 2) - boutdursamp;
 
-for kk = 1:size(EVDFF, 1) 
+for kk = 1:size(EVdata, 1) 
     nanvect = nan([1 elimsample(kk)]);
-    nanEVDFF(kk, 1:size(EVDFF, 2)-boutdursamp(kk)) = nanvect;
+    nanEVdata(kk, 1:size(EVdata, 2)-boutdursamp(kk)) = nanvect;
 end
 
 
 
 
-%% 7. Compute DFF
+%% 7. Compute continuous variable
 
 for nn = 1:size(BLdata)
 
-    if sum(~isnan(nanBLDFF(nn, :))) < 2
-        EvDFFZ(nn, :) = nan([1 size(nanEVDFF, 2)]);
-        BLDFFZ(nn, :) = nan([1 size(nanBLDFF, 2)]);
+    if sum(~isnan(nanBLdata(nn, :))) < 2
+        EVdata(nn, :) = nan([1 size(nanEVdata, 2)]);
+        BLdata(nn, :) = nan([1 size(nanBLdata, 2)]);
     else
-    BLmed(nn) = median(nanBLDFF(nn, :), 'omitnan'); BLmad(nn) = mad(nanBLDFF(nn, :));
-    EvDFFZ(nn, :) = (nanEVDFF(nn, :) - BLmed(nn))./BLmad(nn);  % DFFZ on baseline
+    BLmed(nn) = median(nanBLdata(nn, :), 'omitnan'); BLmad(nn) = mad(nanBLdata(nn, :));
+    EVdataZ(nn, :) = (nanEVDFF(nn, :) - BLmed(nn))./BLmad(nn);  % DFFZ on baseline
 % WITH NORMALIZATION OF BL:
-    BLDFFZ(nn, :) = (nanBLDFF(nn, :) - BLmed(nn))./BLmad(nn);
+    BLdataZ(nn, :) = (nanBLdata(nn, :) - BLmed(nn))./BLmad(nn);
     end
 end
 
 
 %% 8. Downsample through binsize for PETH:
 
-BLjumps = 1:binsize:size(BLDFFZ, 2);
-EVjumps = 1:binsize:size(EvDFFZ, 2);
+BLjumps = 1:bin*fscontvar:size(BLdataZ, 2);
+BLjumps(end+1) = size(BLdataZ, 2);
+BLjumps = round(BLjumps);
+
+EVjumps = 1:bin*fscontvar:size(EVdataZ, 2);
+EVjumps(end+1) = size(EVdataZ, 2);
+EVjumps = round(EVjumps);
 
 for ii = 1:length(BLjumps)-1
-    binnedBL(:,ii) = median(BLDFFZ(:, BLjumps(ii):BLjumps(ii+1)), 2, 'omitnan');
+    binnedBL(:,ii) = median(BLdataZ(:, BLjumps(ii):BLjumps(ii+1)), 2, 'omitnan');
 end
 
-
 for ii = 1:length(EVjumps)-1
-    binnedEV(:, ii) = median(EvDFFZ(:, EVjumps(ii):EVjumps(ii+1)), 2, 'omitnan');
+    binnedEV(:, ii) = median(EVdataZ(:, EVjumps(ii):EVjumps(ii+1)), 2, 'omitnan');
 end
 
 %% 9. Prepare Data for PETH:
@@ -188,19 +228,19 @@ end
 
 % Criteria for BL (threshold = 0.5 seg):
 
-lenBL = zeros([size(BLDFFZ, 1), 1]);
-for kk = 1:size(BLDFFZ, 1)
-    lenBL(kk) = sum(~isnan(BLDFFZ(kk, :)));
+lenBL = zeros([size(BLdataZ, 1), 1]);
+for kk = 1:size(BLdataZ, 1)
+    lenBL(kk) = sum(~isnan(BLdataZ(kk, :)));
 end
 
-sampthresh = round(threshold*size(BLDFFZ, 2)./Post);
+sampthresh = round(threshold*size(BLdataZ, 2)./Post);
 underthresh = lenBL < sampthresh;
 
 % Data and plot PETH:
 
 PETHdata = [binnedEV binnedBL];
 
-PETHfreez = PETHdata; % Save to other var to be saved later wo the criteria and full data
+PETHev = PETHdata; % Save to other var to be saved later wo the criteria and full data
 
 PETHdata = PETHdata(~underthresh, :);
 PETHts = linspace(-Prewfr, Post, size(PETHdata, 2)); 
@@ -210,21 +250,21 @@ PETHevnr = size(PETHdata, 1);
 % Extract summary measures:
 
 if summarymeasures(1) == "mean"
-    PETHm = mean(PETHfreez, 1, 'omitnan');
+    PETHm = mean(PETHev, 1, 'omitnan');
 elseif summarymeasures(1) == "median"
-    PETHm = median(PETHfreez, 1, 'omitnan');
+    PETHm = median(PETHev, 1, 'omitnan');
 end
 
 if summarymeasures(2) == "std"
-    PETHd = std(PETHfreez, 1, 'omitnan');
+    PETHd = std(PETHev, 1, 'omitnan');
 elseif summarymeasures(2) == "sem"
-    PETHd = std(PETHfreez, 1, 'omitnan')./sqrt(size(PETHfreez, 1));
+    PETHd = std(PETHev, 1, 'omitnan')./sqrt(size(PETHev, 1));
 elseif summarymeasures(2) == "ci"
-    SEM = td(PETHfreez, 1, 'omitnan')./sqrt(size(PETHfreez, 1));               % Standard Error
-    ts = tinv([0.025  0.975],size(PETHfreez, 1)-1);      % T-Score
-    PETHd = mean(PETHfreez, 1, 'omitnan') + ts*SEM;                      % Confidence Intervals
+    SEM = td(PETHev, 1, 'omitnan')./sqrt(size(PETHev, 1));               % Standard Error
+    ts = tinv([0.025  0.975],size(PETHev, 1)-1);      % T-Score
+    PETHd = mean(PETHev, 1, 'omitnan') + ts*SEM;                      % Confidence Intervals
 elseif summarymeasures(2) == "mad"
-    PETHd = mad(PETHfreez);
+    PETHd = mad(PETHev);
 end
 
 
@@ -236,22 +276,24 @@ h = imagesc(PETHts, 1:PETHevnr, (PETHdata));
 set(h, 'AlphaData', ~isnan(PETHdata))
 clim([-5 5])
 subplot(2, 1, 2)
-PETHmedia = mean(PETHdata, 1, 'omitnan');
 g = plot(PETHts, median(PETHdata, 1, 'omitnan'), 'LineWidth', 2);
+ylim([-3 3])
 xlim([min(PETHts) max(PETHts)])
 xline(0, '-r')
-yline(mean(mean(BLDFFZ, 1, 'omitnan'), 'omitnan'), '-', 'LineWidth', 1)
-
+yline(mean(mean(BLdataZ, 1, 'omitnan'), 'omitnan'), '-', 'LineWidth', 1)
+titlefig1 = string(strcat(combiname,' Event Onset'));
+set(fig1, 'Name', titlefig1)
 
 fig2 = figure(2);
-plot(Time, DFFZ)
+plot(Time, contvar)
 hold on
 for ii = 1:size(Events, 1)
     xline(Events(ii, 1), '-g')
     xline(Events(ii, 2), '-r')
 end
 title('ZScore DFF with onset freezing events')
-
+titlefig2 = string(strcat(combiname,' ZScore with onset events'));
+set(fig2, 'Name', titlefig2)
 
 % Sort freezing episodes by length: 
 
@@ -259,7 +301,7 @@ title('ZScore DFF with onset freezing events')
 %in case of repeated durations:
 
 for  ii= 1:size(boutdur, 1)
-    sortedPETH(ii, :) = PETHfreez((idx(ii)), :);
+    sortedPETH(ii, :) = PETHev((idx(ii)), :);
 end
 
 
@@ -280,7 +322,7 @@ nexttile
 plot(PETHts, median(PETHdata, 1, 'omitnan'), 'LineWidth', 2);
 xlim([min(PETHts) max(PETHts)])
 xline(0, '-r')
-yline(mean(mean(BLDFFZ, 1, 'omitnan'), 'omitnan'), '-', 'LineWidth', 1)
+yline(mean(mean(BLdataZ, 1, 'omitnan'), 'omitnan'), '-', 'LineWidth', 1)
 
 % Recortar PETH a rangos deseados: 
 
@@ -299,7 +341,7 @@ plot(udPETHts, median(udPETHdata, 1, 'omitnan'), 'LineWidth', 2);
 xlim([min(udPETHts) max(udPETHts)])
 %ylim([min(udPETHdata) max(udPETHdata)])
 xline(0, '-r')
-yline(mean(mean(BLDFFZ, 1, 'omitnan'), 'omitnan'), '-', 'LineWidth', 1)
+yline(mean(mean(BLdataZ, 1, 'omitnan'), 'omitnan'), '-', 'LineWidth', 1)
 
 
 if summarymeasures(1) == "mean"
@@ -323,15 +365,15 @@ end
 
 %% 11. AUC + Peak + density of AUC: 
 
-PETHfs = bin;
+PETHfsev = bin;
 PETHtsAUC = PETHts + Prewfr; % Escalo a 0
 
 for jj = 1:size(binnedBL, 1)
-    if double(sum(~isnan(binnedBL(jj, :))))*PETHfs < 0.5 % criterio de duración.. si ponemos una fs para el PETH muy alto, hay que tener cuidado porque podría pasar mucho esto al ser un ds
-        tbl(jj) = sum(~isnan(binnedBL(jj, :)))*PETHfs; AUCbl(jj) = nan;
+    if double(sum(~isnan(binnedBL(jj, :))))*PETHfsev < 0.5 % criterio de duración.. si ponemos una fs para el PETH muy alto, hay que tener cuidado porque podría pasar mucho esto al ser un ds
+        tbl(jj) = sum(~isnan(binnedBL(jj, :)))*PETHfsev; AUCbl(jj) = nan;
         densbl(jj) = nan; AUCev(jj) = nan; densev(jj) = nan;
     else
-    tbl(jj) = double(sum(~isnan(binnedBL(jj, :))))*PETHfs; % duración bin en seg // la dur del bout ya la tenemos
+    tbl(jj) = double(sum(~isnan(binnedBL(jj, :))))*PETHfsev; % duración bin en seg // la dur del bout ya la tenemos
     tempBLts = PETHtsAUC(1:sum(~isnan(binnedBL(jj,:))));
     AUCbl(jj) = trapz(tempBLts, binnedBL(jj, ~isnan(binnedBL(jj, :))));
     densbl(jj) = AUCbl(jj)./length(binnedBL(jj, ~isnan(binnedBL(jj, :))));
@@ -349,15 +391,15 @@ DENSdata = AUCdata;
 AUCdur = AUCdata;
 
 for ii = 1:AUCqt
-    for jj = 1:size(binnedBL, 1)
-        if double(sum(PETHts >= AUCint(ii, 1) & PETHts < AUCint(ii, 2) & ~isnan(PETHfreez(jj, :))))*bin < 0.5
+    for jj = 1:size(BLdataZ, 1)
+        if double(sum(PETHts >= AUCint(ii, 1) & PETHts < AUCint(ii, 2) & ~isnan(PETHev(jj, :))))*bin < 0.5
             AUCdata(jj, ii) = nan;
             DENSdata(jj, ii) = nan;
-            AUCdur(jj, ii) = double(sum(PETHts >= AUCint(ii, 1) & PETHts <= AUCint(ii, 2) & ~isnan(PETHfreez(jj, :))))*bin;
+            AUCdur(jj, ii) = double(sum(PETHts >= AUCint(ii, 1) & PETHts <= AUCint(ii, 2) & ~isnan(PETHev(jj, :))))*bin;
         else
-        AUCdata(jj, ii) = trapz(bin, PETHfreez(jj, (PETHts >= AUCint(ii, 1) & PETHts <= AUCint(ii, 2) & ~isnan(PETHfreez(jj, :)))));
-        AUCdur(jj, ii) = double(sum(PETHts >= AUCint(ii, 1) & PETHts <= AUCint(ii, 2) & ~isnan(PETHfreez(jj, :))))*bin;
-        DENSdata(jj, ii) = AUCdata(jj, ii)./length(PETHfreez(jj, (PETHts >= AUCint(ii, 1) & PETHts < AUCint(ii, 2) & ~isnan(PETHfreez(jj, :)))));
+        AUCdata(jj, ii) = trapz(bin, PETHev(jj, (PETHts >= AUCint(ii, 1) & PETHts <= AUCint(ii, 2) & ~isnan(PETHev(jj, :)))));
+        AUCdur(jj, ii) = double(sum(PETHts >= AUCint(ii, 1) & PETHts <= AUCint(ii, 2) & ~isnan(PETHev(jj, :))))*bin;
+        DENSdata(jj, ii) = AUCdata(jj, ii)./length(PETHev(jj, (PETHts >= AUCint(ii, 1) & PETHts < AUCint(ii, 2) & ~isnan(PETHev(jj, :)))));
         end
     end
 end  
@@ -413,38 +455,38 @@ end
 
 %% Calculate n for each value in mean:
 
-idxPETH = ~isnan(PETHfreez); nint = sum(idxPETH, 1);
+idxPETH = ~isnan(PETHev); nint = sum(idxPETH, 1);
 idxudPETH = ~isnan(udPETHdata); nintud = sum(idxudPETH, 1);
 
 %% 12. Save all data and figures: 
 
 % Params:
-results.PETH.offset.params.Pre = Pre;
-results.PETH.offset.params.Post = Post;
-results.PETH.offset.params.Prewfr = Prewfr;
-results.PETH.offset.params.PreWind = PreWind;
-results.PETH.offset.params.PostWind = PostWind;
-results.PETH.offset.params.bin = bin;
-results.PETH.offset.params.binsize = binsize; % in samples
-results.PETH.offset.params.binthreshold = threshold;
-results.PETH.offset.params.summarymeasures = summarymeasures;
+results.PETH.offset.combiname.params.Pre = Pre;
+results.PETH.offset.combiname.params.Post = Post;
+results.PETH.offset.combiname.params.Prewfr = Prewfr;
+results.PETH.offset.combiname.params.PreWind = PreWind;
+results.PETH.offset.combiname.params.PostWind = PostWind;
+results.PETH.offset.combiname.params.bin = bin;
+results.PETH.offset.combiname.params.binsize = binsize; % in samples
+results.PETH.offset.combiname.params.binthreshold = threshold;
+results.PETH.offset.combiname.params.summarymeasures = summarymeasures;
 
 % PETH variables: 
 
-results.PETH.offset.PETHdata = PETHfreez;
-results.PETH.offset.PETHwbincriteria = PETHdata;
-results.PETH.offset.PETHts = PETHts;
-results.PETH.offset.udPETHdata = udPETHdata;
-results.PETH.offset.udPETHts = udPETHts;
+results.PETH.offset.combiname.PETHdata = PETHfreez;
+results.PETH.offset.combiname.PETHwbincriteria = PETHdata;
+results.PETH.offset.combiname.PETHts = PETHts;
+results.PETH.offset.combiname.udPETHdata = udPETHdata;
+results.PETH.offset.combiname.udPETHts = udPETHts;
 
-results.PETH.offset.PETHmean = PETHm;
-results.PETH.offset.PETHdev = PETHd;
-results.PETH.offset.udPETHmean = udPETHm;
-results.PETH.offset.udPETHdev = udPETHd;
+results.PETH.offset.combiname.PETHmean = PETHm;
+results.PETH.offset.combiname.PETHdev = PETHd;
+results.PETH.offset.combiname.udPETHmean = udPETHm;
+results.PETH.offset.combiname.udPETHdev = udPETHd;
 
-results.PETH.offset.sortedPETH = sortedPETH;
-results.PETH.offset.EvDFFZ = EvDFFZ;
-results.PETH.offset.BLDFFZ = BLDFFZ;
+results.PETH.offset.combiname.sortedPETH = sortedPETH;
+results.PETH.offset.combiname.EvDFFZ = EvDFFZ;
+results.PETH.offset.combiname.BLDFFZ = BLDFFZ;
 
 
 
@@ -455,10 +497,10 @@ folderpath2 = strcat(savepath, '/Data');
 mkdir(folderpath1, 'offsetPETH');
 mkdir(folderpath2, 'offsetPETH')
 
-fig1name = strcat(results.FP.path, '/Figures/offsetPETH/offcompletePETH.jpeg');
-fig2name = strcat(results.FP.path, '/Figures/offsetPETH/offeventsDFF.jpeg');
-fig3name = strcat(results.FP.path, '/Figures/offsetPETH/offsortedPETH.jpeg');
-fig4name = strcat(results.FP.path, '/Figures/offsetPETH/offblthreshPETH.jpeg');
+fig1name = strcat(savepath, '/Figures/offsetPETH/offcompletePETH.jpeg');
+fig2name = strcat(savepath, '/Figures/offsetPETH/offeventsDFF.jpeg');
+fig3name = strcat(savepath, '/Figures/offsetPETH/offsortedPETH.jpeg');
+fig4name = strcat(savepath, '/Figures/offsetPETH/offblthreshPETH.jpeg');
 
 saveas(fig1, fig1name)
 saveas(fig2, fig2name)
@@ -467,9 +509,18 @@ saveas(fig4, fig4name)
 
 % Tables:
 
-xlsx1 = strcat(results.FP.path, '/Data/offsetPETH/offprepostAUC.xlsx');
-xlsx2 = strcat(results.FP.path, '/Data/offsetPETH/offallintAUC.xlsx');
-xlsx3 = strcat(results.FP.path, '/Data/offsetPETH/offsamelengthintAUC.xlsx');
+xlsx1 = strcat(savepath, '/Data/offsetPETH/offprepostAUC.xlsx');
+xlsx2 = strcat(savepath, '/Data/offsetPETH/offallintAUC.xlsx');
+xlsx3 = strcat(savepath, '/Data/offsetPETH/offsamelengthintAUC.xlsx');
+ if exist(xlsx1, 'file')
+ delete(xlsx1);
+ end
+ if exist(xlsx2, 'file')
+ delete(xlsx2);
+ end
+ if exist(xlsx3, 'file')
+ delete(xlsx3);
+ end
 writetable(prepostFP, xlsx1, 'WriteVariableNames', true); 
 writetable(allintFP, xlsx2, 'WriteVariableNames', true);
 if ~isempty(AUCsamelen)
@@ -482,33 +533,59 @@ end
 % Events:
 
 pethcolcompletets = string(PETHts);
-xlsx4 = strcat(results.FP.path, '/Data/offsetPETH/completePETH.xlsx');
-xlsx5 = strcat(results.FP.path, '/Data/offsetPETH/sortedPETHwthresh.xlsx');
-xlsx6 = strcat(results.FP.path, '/Data/offsetPETH/PETHwthresh.xlsx');
-PETHfreez2 = array2table(PETHfreez, 'VariableNames', pethcolcompletets);
+xlsx4 = strcat(savepath, '/Data/offsetPETH/completePETH.xlsx');
+xlsx5 = strcat(savepath, '/Data/offsetPETH/sortedPETHwthresh.xlsx');
+xlsx6 = strcat(savepath, '/Data/offsetPETH/PETHwthresh.xlsx');
+PETHev2 = array2table(PETHev, 'VariableNames', pethcolcompletets);
 sortedPETH2 = array2table(sortedPETH, 'VariableNames', pethcolcompletets);
 PETHdata2 = array2table(PETHdata, 'VariableNames',pethcolcompletets);
-
-writetable(PETHfreez2, xlsx4, 'WriteVariableNames', true);
+ if exist(xlsx4, 'file')
+ delete(xlsx4);
+ end
+ if exist(xlsx5, 'file')
+ delete(xlsx5);
+ end
+ if exist(xlsx6, 'file')
+ delete(xlsx6);
+ end
+writetable(PETHev2, xlsx4, 'WriteVariableNames', true);
 writetable(sortedPETH2, xlsx5, 'WriteVariableNames', true);
 writetable(PETHdata2, xlsx6, 'WriteVariableNames', true);
 
 pethcolintts = string(udPETHts);
-xlsx7 = strcat(results.FP.path, '/Data/offsetPETH/udPETH.xlsx');
+xlsx7 = strcat(savepath, '/Data/offsetPETH/udPETH.xlsx');
 udPETHdata2 = array2table(udPETHdata, 'VariableNames', pethcolintts);
+ if exist(xlsx7, 'file')
+ delete(xlsx7);
+ end
 writetable(udPETHdata2, xlsx7, 'WriteVariableNames', true);
 
 
 
 % Mean + sem:
 
-summaryPETH = table(PETHts.', PETHm.', PETHd.', nint.', 'VariableNames', {'Time' char(summarymeasures(1)) char(summarymeasures(2)) 'n'});
-udsummaryPETH = table(udPETHts.', udPETHm.', udPETHd.', nintud.', 'VariableNames', {'Time' char(summarymeasures(1)) char(summarymeasures(2)) 'n'});
+    
+if size(PETHdata, 1) == 1
+    PETHd = nan(length(PETHts),1);
+    udPETHd = nan(length(udPETHts),1);
+    summaryPETH = table(PETHts.', PETHm.', PETHd, nint.', 'VariableNames', {'Time' char(summarymeasures(1)) char(summarymeasures(2)) 'n'});
+    udsummaryPETH = table(udPETHts.', udPETHm.', udPETHd, nintud.', 'VariableNames', {'Time' char(summarymeasures(1)) char(summarymeasures(2)) 'n'});
+else
+    summaryPETH = table(PETHts.', PETHm.', PETHd.', nint.', 'VariableNames', {'Time' char(summarymeasures(1)) char(summarymeasures(2)) 'n'});
+    udsummaryPETH = table(udPETHts.', udPETHm.', udPETHd.', nintud.', 'VariableNames', {'Time' char(summarymeasures(1)) char(summarymeasures(2)) 'n'});
+end
+
 
 xlsx8 = strcat(results.FP.path, '/Data/offsetPETH/offsummaryPETH.xlsx');
 xlsx9 = strcat(results.FP.path, '/Data/offsetPETH/offudsummaryPETH.xlsx');
-
+if exist(xlsx8, 'file')
+delete(xlsx8);
+end
 writetable(summaryPETH, xlsx8)
+
+if exist(xlsx9, 'file')
+delete(xlsx9);
+end
 writetable(udsummaryPETH, xlsx9)
 
 
